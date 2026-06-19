@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+dist/
+.vs/
+
+# Android / MAUI output
+*.apk
+*.aab
+*.keystore
+*.pdb
+*.dll
+*.exe
+
+# User/editor files
+*.user
+*.suo
+*.tmp
+.DS_Store
+Thumbs.db
