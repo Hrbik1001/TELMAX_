@@ -39,5 +39,6 @@ jobs:
         with:
           name: PIDMobileSpeaker-debug-apk
           path: |
-            **/bin/Debug/net8.0-android/**/*.apk
-            **/bin/Debug/net8.0-android/*.apk
+            **/bin/Debug/net10.0-android/**/*.apk
+            **/bin/Debug/net10.0-android/*.apk
+            **/*.apk
