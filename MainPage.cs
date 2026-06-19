@@ -8,17 +8,17 @@ public sealed class MainPage : ContentPage
     private readonly RouteProgressService _route;
 
     private readonly Entry _lineEntry = new() { Placeholder = "Linka", Keyboard = Keyboard.Numeric };
-    private readonly Entry _spojEntry = new() { Placeholder = "Spoj / trip", Keyboard = Keyboard.Text };
+    private readonly Entry _spojEntry = new() { Placeholder = "Spoj", Keyboard = Keyboard.Text };
     private readonly Picker _tripPicker = new() { Title = "Vyber spoj" };
 
-    private readonly Label _status = Label("Start");
-    private readonly Label _line = BigLabel("-");
-    private readonly Label _trip = BigLabel("-");
-    private readonly Label _current = BigLabel("Aktuální: -");
-    private readonly Label _next = BigLabel("Příští: -");
-    private readonly Label _distance = BigLabel("GPS: -");
-    private readonly Label _gps = Label("-");
-    private readonly Label _log = Label("");
+    private readonly Label _status = MakeSmallLabel("Start");
+    private readonly Label _line = MakeBigLabel("-");
+    private readonly Label _trip = MakeBigLabel("-");
+    private readonly Label _current = MakeBigLabel("Aktuální: -");
+    private readonly Label _next = MakeBigLabel("Příští: -");
+    private readonly Label _distance = MakeBigLabel("Vzdálenost: -");
+    private readonly Label _gps = MakeSmallLabel("GPS: -");
+    private readonly Label _log = MakeSmallLabel("");
 
     private readonly List<CachedTrip> _foundTrips = new();
 
@@ -31,106 +31,60 @@ public sealed class MainPage : ContentPage
 
         Title = "PID Mobile Speaker";
         BackgroundColor = Color.FromArgb("#1F272F");
-
         Content = BuildLayout();
         RefreshState();
     }
 
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+
+        if (_data.HasData && _data.Cache == null)
+            _status.Text = "Data nalezena. Klikni Načíst data.";
+    }
+
     private View BuildLayout()
     {
-        var root = new Grid
-        {
-            Padding = new Thickness(12),
-            RowDefinitions =
-            {
-                new RowDefinition(GridLength.Auto),
-                new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Auto)
-            },
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Star)
-            }
-        };
-
-        var top = new Grid
-        {
-            ColumnSpacing = 8,
-            RowSpacing = 8,
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(new GridLength(1.0, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(1.0, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(2.0, GridUnitType.Star)),
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Auto)
-            }
-        };
-
         _lineEntry.TextColor = Colors.White;
-        _spojEntry.TextColor = Colors.White;
         _lineEntry.BackgroundColor = Color.FromArgb("#2B3440");
+        _spojEntry.TextColor = Colors.White;
         _spojEntry.BackgroundColor = Color.FromArgb("#2B3440");
         _tripPicker.TextColor = Colors.White;
         _tripPicker.BackgroundColor = Color.FromArgb("#2B3440");
 
-        top.Add(_lineEntry, 0, 0);
-        top.Add(_spojEntry, 1, 0);
-        top.Add(_tripPicker, 2, 0);
-        top.Add(Button("Import ZIP", ImportZipAsync), 3, 0);
-        top.Add(Button("Načíst data", LoadDataAsync), 4, 0);
-        top.Add(Button("Najít spoj", FindTripsAsync), 5, 0);
-
-        root.Add(top, 0, 0);
-
-        var body = new Grid
-        {
-            Margin = new Thickness(0, 12, 0, 12),
-            ColumnSpacing = 12,
-            RowSpacing = 12,
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(1.8, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star))
-            },
-            RowDefinitions =
-            {
-                new RowDefinition(GridLength.Auto),
-                new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Auto)
-            }
-        };
-
-        var leftPanel = Panel(new VerticalStackLayout
+        var top = new HorizontalStackLayout
         {
             Spacing = 8,
             Children =
             {
-                Label("Linka"),
-                _line,
-                Label("Spoj"),
-                _trip,
-                Label("Stav"),
-                _status
+                Sized(_lineEntry, 120),
+                Sized(_spojEntry, 120),
+                Sized(_tripPicker, 420),
+                Button("Import ZIP", ImportZipAsync),
+                Button("Načíst data", LoadDataAsync),
+                Button("Najít spoj", FindTripsAsync)
             }
-        });
+        };
 
-        var centerPanel = Panel(new VerticalStackLayout
+        var left = Panel(new VerticalStackLayout
         {
-            Spacing = 14,
-            VerticalOptions = LayoutOptions.Center,
+            Spacing = 8,
             Children =
             {
-                _current,
-                _next,
-                _distance,
-                _gps
+                MakeSmallLabel("Linka"), _line,
+                MakeSmallLabel("Spoj"), _trip,
+                MakeSmallLabel("Stav"), _status
             }
         });
 
-        var rightPanel = Panel(new Grid
+        var middle = Panel(new VerticalStackLayout
+        {
+            Spacing = 16,
+            VerticalOptions = LayoutOptions.Center,
+            Children = { _current, _next, _distance, _gps }
+        });
+
+        var buttons = new Grid
         {
             RowSpacing = 8,
             ColumnSpacing = 8,
@@ -145,50 +99,42 @@ public sealed class MainPage : ContentPage
             {
                 new ColumnDefinition(GridLength.Star),
                 new ColumnDefinition(GridLength.Star)
-            },
-            Children =
-            {
-                Button("Start GPS", StartGpsAsync).At(0, 0),
-                Button("Stop", StopGps).At(1, 0),
-                Button("Hlásit zastávku\n50 m", ManualCurrentAsync).At(0, 1),
-                Button("Příští zastávka\npo 80 m", ManualNextAsync).At(1, 1),
-                Button("←", () => { _route.MovePrevious(); return Task.CompletedTask; }).At(0, 2),
-                Button("→", () => { _route.MoveForwardWithoutAnnouncement(); return Task.CompletedTask; }).At(1, 2),
-                Button("Vybrat spoj", SelectTripAsync).At(0, 3, 2)
             }
-        });
+        };
 
-        body.Add(leftPanel, 0, 0);
-        Grid.SetRowSpan(leftPanel, 3);
+        AddToGrid(buttons, Button("Start GPS", StartGpsAsync), 0, 0);
+        AddToGrid(buttons, Button("Stop", StopGps), 1, 0);
+        AddToGrid(buttons, Button("Hlásit zastávku\n50 m", ManualCurrentAsync), 0, 1);
+        AddToGrid(buttons, Button("Příští zastávka\npo 80 m", ManualNextAsync), 1, 1);
+        AddToGrid(buttons, Button("←", () => { _route.MovePrevious(); return Task.CompletedTask; }), 0, 2);
+        AddToGrid(buttons, Button("→", () => { _route.MoveForwardWithoutAnnouncement(); return Task.CompletedTask; }), 1, 2);
+        AddToGrid(buttons, Button("Vybrat spoj", SelectTripAsync), 0, 3, 2);
 
-        body.Add(centerPanel, 1, 0);
-        Grid.SetRowSpan(centerPanel, 3);
+        var right = Panel(buttons);
 
-        body.Add(rightPanel, 2, 0);
-        Grid.SetRowSpan(rightPanel, 3);
+        var body = new Grid
+        {
+            ColumnSpacing = 12,
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(1.8, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star))
+            }
+        };
 
-        root.Add(body, 0, 1);
+        body.Add(left, 0, 0);
+        body.Add(middle, 1, 0);
+        body.Add(right, 2, 0);
 
-        _log.LineBreakMode = LineBreakMode.TailTruncation;
-        _log.TextColor = Color.FromArgb("#BDBEBF");
-        root.Add(_log, 0, 2);
+        var root = new VerticalStackLayout
+        {
+            Padding = new Thickness(12),
+            Spacing = 12,
+            Children = { top, body, _log }
+        };
 
         return root;
-    }
-
-    protected override async void OnAppearing()
-    {
-        base.OnAppearing();
-
-        if (_data.HasData && _data.Cache == null)
-        {
-            _status.Text = "Data nalezena. Klikni Načíst data.";
-        }
-
-        await DisplayAlert(
-            "GPS hlášení",
-            "Logika: vstup do 50 m pole okolo aktuální zastávky = Hlášení zastávky. Opuštění 80 m pole = posun na další zastávku a hlášení Příští zastávka. Ano, konečně nějaká logika, která se dá vysvětlit bez tabule.",
-            "OK");
     }
 
     private async Task ImportZipAsync()
@@ -226,13 +172,12 @@ public sealed class MainPage : ContentPage
         _foundTrips.Clear();
         _tripPicker.Items.Clear();
 
-        var trips = _data.FindTrips(_lineEntry.Text ?? "", _spojEntry.Text ?? "");
-        foreach (var t in trips)
+        foreach (var trip in _data.FindTrips(_lineEntry.Text ?? "", _spojEntry.Text ?? ""))
         {
-            _foundTrips.Add(t);
-            var first = t.Stops.FirstOrDefault();
-            var last = t.Stops.LastOrDefault();
-            _tripPicker.Items.Add($"{t.Line} / {ShortTrip(t)}  {first?.DepartureTime}  {first?.Name} → {last?.Name}");
+            _foundTrips.Add(trip);
+            var first = trip.Stops.FirstOrDefault();
+            var last = trip.Stops.LastOrDefault();
+            _tripPicker.Items.Add($"{trip.Line} / {ShortTrip(trip)}  {first?.DepartureTime}  {first?.Name} → {last?.Name}");
         }
 
         if (_tripPicker.Items.Count > 0)
@@ -242,7 +187,7 @@ public sealed class MainPage : ContentPage
         }
         else
         {
-            _status.Text = "Nic nenalezeno. To je buď špatná linka, nebo realita znovu škodí.";
+            _status.Text = "Nic nenalezeno.";
         }
 
         return Task.CompletedTask;
@@ -317,7 +262,21 @@ public sealed class MainPage : ContentPage
     private static string ShortTrip(CachedTrip trip)
         => !string.IsNullOrWhiteSpace(trip.TripShortName) ? trip.TripShortName : trip.TripId;
 
-    private static Label Label(string text) => new()
+    private static View Sized(View view, double width)
+    {
+        view.WidthRequest = width;
+        return view;
+    }
+
+    private static void AddToGrid(Grid grid, View view, int column, int row, int columnSpan = 1)
+    {
+        Grid.SetColumn(view, column);
+        Grid.SetRow(view, row);
+        Grid.SetColumnSpan(view, columnSpan);
+        grid.Children.Add(view);
+    }
+
+    private static Label MakeSmallLabel(string text) => new()
     {
         Text = text,
         TextColor = Color.FromArgb("#BDBEBF"),
@@ -325,7 +284,7 @@ public sealed class MainPage : ContentPage
         FontAttributes = FontAttributes.Bold
     };
 
-    private static Label BigLabel(string text) => new()
+    private static Label MakeBigLabel(string text) => new()
     {
         Text = text,
         TextColor = Colors.White,
@@ -345,7 +304,7 @@ public sealed class MainPage : ContentPage
 
     private static Button Button(string text, Func<Task> click)
     {
-        var b = new Button
+        var button = new Button
         {
             Text = text,
             TextColor = Colors.White,
@@ -357,7 +316,7 @@ public sealed class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold
         };
 
-        b.Clicked += async (_, _) =>
+        button.Clicked += async (_, _) =>
         {
             try { await click(); }
             catch (Exception ex)
@@ -366,18 +325,6 @@ public sealed class MainPage : ContentPage
             }
         };
 
-        return b;
-    }
-}
-
-public static class GridChildExtensions
-{
-    public static View At(this View view, int column, int row, int columnSpan = 1, int rowSpan = 1)
-    {
-        Grid.SetColumn(view, column);
-        Grid.SetRow(view, row);
-        Grid.SetColumnSpan(view, columnSpan);
-        Grid.SetRowSpan(view, rowSpan);
-        return view;
+        return button;
     }
 }
