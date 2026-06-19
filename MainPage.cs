@@ -1,330 +1,195 @@
-using PIDMobileSpeaker.Services;
-
 namespace PIDMobileSpeaker;
 
 public sealed class MainPage : ContentPage
 {
-    private readonly AppDataService _data;
-    private readonly RouteProgressService _route;
+    private readonly Label _displayLine = Text("544p", 42, true, Colors.White);
+    private readonly Label _displayTrip = Text("Spoj --", 24, true, Colors.White);
+    private readonly Label _displayStop = Text("Aktuální zastávka", 28, true, Colors.White);
+    private readonly Label _displayNext = Text("Příští zastávka", 24, true, Color.FromArgb("#BFD7EA"));
+    private readonly Label _status = Text("TELMAX Mobile spuštěn", 18, false, Color.FromArgb("#DCE7EF"));
 
-    private readonly Entry _lineEntry = new() { Placeholder = "Linka", Keyboard = Keyboard.Numeric };
-    private readonly Entry _spojEntry = new() { Placeholder = "Spoj", Keyboard = Keyboard.Text };
-    private readonly Picker _tripPicker = new() { Title = "Vyber spoj" };
-
-    private readonly Label _status = MakeSmallLabel("Start");
-    private readonly Label _line = MakeBigLabel("-");
-    private readonly Label _trip = MakeBigLabel("-");
-    private readonly Label _current = MakeBigLabel("Aktuální: -");
-    private readonly Label _next = MakeBigLabel("Příští: -");
-    private readonly Label _distance = MakeBigLabel("Vzdálenost: -");
-    private readonly Label _gps = MakeSmallLabel("GPS: -");
-    private readonly Label _log = MakeSmallLabel("");
-
-    private readonly List<CachedTrip> _foundTrips = new();
-
-    public MainPage(AppDataService data, RouteProgressService route)
+    public MainPage()
     {
-        _data = data;
-        _route = route;
-        _route.StateChanged += RefreshState;
-        Logger.LineWritten += line => MainThread.BeginInvokeOnMainThread(() => _log.Text = line);
-
-        Title = "PID Mobile Speaker";
-        BackgroundColor = Color.FromArgb("#1F272F");
-        Content = BuildLayout();
-        RefreshState();
+        Title = "TELMAX Mobile";
+        BackgroundColor = Color.FromArgb("#88A2B2");
+        Content = BuildScreen();
     }
 
-    protected override void OnAppearing()
+    private View BuildScreen()
     {
-        base.OnAppearing();
-
-        if (_data.HasData && _data.Cache == null)
-            _status.Text = "Data nalezena. Klikni Načíst data.";
-    }
-
-    private View BuildLayout()
-    {
-        _lineEntry.TextColor = Colors.White;
-        _lineEntry.BackgroundColor = Color.FromArgb("#2B3440");
-        _spojEntry.TextColor = Colors.White;
-        _spojEntry.BackgroundColor = Color.FromArgb("#2B3440");
-        _tripPicker.TextColor = Colors.White;
-        _tripPicker.BackgroundColor = Color.FromArgb("#2B3440");
-
-        var top = new HorizontalStackLayout
+        var root = new Grid
         {
-            Spacing = 8,
-            Children =
-            {
-                Sized(_lineEntry, 120),
-                Sized(_spojEntry, 120),
-                Sized(_tripPicker, 420),
-                Button("Import ZIP", ImportZipAsync),
-                Button("Načíst data", LoadDataAsync),
-                Button("Najít spoj", FindTripsAsync)
-            }
-        };
-
-        var left = Panel(new VerticalStackLayout
-        {
-            Spacing = 8,
-            Children =
-            {
-                MakeSmallLabel("Linka"), _line,
-                MakeSmallLabel("Spoj"), _trip,
-                MakeSmallLabel("Stav"), _status
-            }
-        });
-
-        var middle = Panel(new VerticalStackLayout
-        {
-            Spacing = 16,
-            VerticalOptions = LayoutOptions.Center,
-            Children = { _current, _next, _distance, _gps }
-        });
-
-        var buttons = new Grid
-        {
-            RowSpacing = 8,
-            ColumnSpacing = 8,
+            Padding = new Thickness(6),
+            RowSpacing = 6,
+            ColumnSpacing = 6,
             RowDefinitions =
             {
+                new RowDefinition(new GridLength(54)),
                 new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Star)
+                new RowDefinition(new GridLength(64))
             },
             ColumnDefinitions =
             {
-                new ColumnDefinition(GridLength.Star),
-                new ColumnDefinition(GridLength.Star)
+                new ColumnDefinition(new GridLength(1.0, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(245))
             }
         };
 
-        AddToGrid(buttons, Button("Start GPS", StartGpsAsync), 0, 0);
-        AddToGrid(buttons, Button("Stop", StopGps), 1, 0);
-        AddToGrid(buttons, Button("Hlásit zastávku\n50 m", ManualCurrentAsync), 0, 1);
-        AddToGrid(buttons, Button("Příští zastávka\npo 80 m", ManualNextAsync), 1, 1);
-        AddToGrid(buttons, Button("←", () => { _route.MovePrevious(); return Task.CompletedTask; }), 0, 2);
-        AddToGrid(buttons, Button("→", () => { _route.MoveForwardWithoutAnnouncement(); return Task.CompletedTask; }), 1, 2);
-        AddToGrid(buttons, Button("Vybrat spoj", SelectTripAsync), 0, 3, 2);
-
-        var right = Panel(buttons);
-
-        var body = new Grid
+        var header = new Grid
         {
-            ColumnSpacing = 12,
+            BackgroundColor = Color.FromArgb("#AEB9BE"),
+            Padding = new Thickness(10, 4),
             ColumnDefinitions =
             {
-                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(1.8, GridUnitType.Star)),
-                new ColumnDefinition(new GridLength(1.1, GridUnitType.Star))
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(new GridLength(260))
+            }
+        };
+        header.Add(Text("Hořovice, Žel. stanice", 22, true, Colors.Black), 0, 0);
+        header.Add(Text("Výdej jízdenek", 22, true, Color.FromArgb("#004E9E")), 1, 0);
+        root.Add(header, 0, 0);
+        Grid.SetColumnSpan(header, 2);
+
+        var main = new Grid
+        {
+            RowSpacing = 6,
+            ColumnSpacing = 6,
+            RowDefinitions =
+            {
+                new RowDefinition(new GridLength(1, GridUnitType.Star)),
+                new RowDefinition(new GridLength(1, GridUnitType.Star)),
+                new RowDefinition(new GridLength(1, GridUnitType.Star)),
+                new RowDefinition(new GridLength(1, GridUnitType.Star))
+            },
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
+                new ColumnDefinition(new GridLength(1, GridUnitType.Star))
             }
         };
 
-        body.Add(left, 0, 0);
-        body.Add(middle, 1, 0);
-        body.Add(right, 2, 0);
+        AddButton(main, "Linka / spoj", "#0169B4", () => SetStatus("Výběr linky/spoje zatím připraven jako obrazovka."), 0, 0);
+        AddButton(main, "Výdej\njízdenek", "#38A38C", () => SetStatus("Výdej jízdenek bude další přepsaná obrazovka."), 1, 0);
+        AddButton(main, "Služební\nhlášky", "#B4ABD4", () => SetStatus("Služební hlášky budou napojené na audio."), 2, 0);
+        AddButton(main, "Údaje\npro ČK", "#96AFBD", () => SetStatus("Údaje pro ČK připraveno."), 3, 0);
 
-        var root = new VerticalStackLayout
+        AddButton(main, "Hlásit\nzastávku", "#619BC4", () => SetStatus("Ruční hlášení zastávky."), 0, 1);
+        AddButton(main, "Příští\nzastávka", "#619BC4", () => SetStatus("Ruční příští zastávka."), 1, 1);
+        AddButton(main, "Start\nGPS", "#898A37", () => SetStatus("GPS režim: 50 m / 80 m bude napojený v další verzi."), 2, 1);
+        AddButton(main, "Stop\nGPS", "#8A9DA2", () => SetStatus("GPS zastaveno."), 3, 1);
+
+        AddButton(main, "544p", "#84873D", () => SetLine("544p"), 0, 2);
+        AddButton(main, "544z", "#84873D", () => SetLine("544z"), 1, 2);
+        AddButton(main, "Spoj 1", "#AEB9BE", () => SetTrip("Spoj 1"), 2, 2);
+        AddButton(main, "Spoj 3", "#AEB9BE", () => SetTrip("Spoj 3"), 3, 2);
+
+        AddButton(main, "←", "#AEB9BE", () => SetStatus("Posun zpět."), 0, 3);
+        AddButton(main, "→", "#AEB9BE", () => SetStatus("Posun vpřed."), 1, 3);
+        AddButton(main, "Import\ndat", "#96AFBD", () => SetStatus("Import dat bude napojený později."), 2, 3);
+        AddButton(main, "Nastavení", "#96AFBD", () => SetStatus("Nastavení."), 3, 3);
+
+        root.Add(main, 0, 1);
+
+        var right = new VerticalStackLayout
         {
-            Padding = new Thickness(12),
-            Spacing = 12,
-            Children = { top, body, _log }
+            Spacing = 6,
+            BackgroundColor = Color.FromArgb("#9AA9AE"),
+            Padding = new Thickness(6),
+            Children =
+            {
+                SideButton("Ztmavení\ndispleje"),
+                SideButton("Storno\njízdenky"),
+                SideButton("Lítačka"),
+                SideButton("Online\ndotaz"),
+                SideButton("ARRIVA"),
+                SideButton("Zavazadlo\nPes")
+            }
         };
+        root.Add(right, 1, 1);
+
+        var bottom = new Grid
+        {
+            BackgroundColor = Color.FromArgb("#151D2E"),
+            Padding = new Thickness(10, 4),
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(new GridLength(120)),
+                new ColumnDefinition(new GridLength(120)),
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(new GridLength(300))
+            }
+        };
+        bottom.Add(_displayLine, 0, 0);
+        bottom.Add(_displayTrip, 1, 0);
+        bottom.Add(new VerticalStackLayout
+        {
+            Spacing = 0,
+            Children = { _displayStop, _displayNext }
+        }, 2, 0);
+        bottom.Add(_status, 3, 0);
+        root.Add(bottom, 0, 2);
+        Grid.SetColumnSpan(bottom, 2);
 
         return root;
     }
 
-    private async Task ImportZipAsync()
+    private void SetLine(string line)
     {
-        try
-        {
-            _status.Text = "Importuju ZIP...";
-            var msg = await _data.ImportZipAsync();
-            _status.Text = msg;
-        }
-        catch (Exception ex)
-        {
-            _status.Text = "Import selhal: " + ex.Message;
-            Logger.Error(ex.ToString());
-        }
+        _displayLine.Text = line;
+        SetStatus("Vybrána linka " + line);
     }
 
-    private async Task LoadDataAsync()
+    private void SetTrip(string trip)
     {
-        try
-        {
-            _status.Text = "Načítám PID data...";
-            await _data.LoadDataAsync();
-            _status.Text = "Data načtena. Zadej linku/spoj.";
-        }
-        catch (Exception ex)
-        {
-            _status.Text = "Načtení selhalo: " + ex.Message;
-            Logger.Error(ex.ToString());
-        }
+        _displayTrip.Text = trip;
+        SetStatus("Vybrán " + trip);
     }
 
-    private Task FindTripsAsync()
+    private void SetStatus(string text)
     {
-        _foundTrips.Clear();
-        _tripPicker.Items.Clear();
-
-        foreach (var trip in _data.FindTrips(_lineEntry.Text ?? "", _spojEntry.Text ?? ""))
-        {
-            _foundTrips.Add(trip);
-            var first = trip.Stops.FirstOrDefault();
-            var last = trip.Stops.LastOrDefault();
-            _tripPicker.Items.Add($"{trip.Line} / {ShortTrip(trip)}  {first?.DepartureTime}  {first?.Name} → {last?.Name}");
-        }
-
-        if (_tripPicker.Items.Count > 0)
-        {
-            _tripPicker.SelectedIndex = 0;
-            _status.Text = $"Nalezeno {_tripPicker.Items.Count} spojů.";
-        }
-        else
-        {
-            _status.Text = "Nic nenalezeno.";
-        }
-
-        return Task.CompletedTask;
+        _status.Text = text;
     }
 
-    private Task SelectTripAsync()
+    private static void AddButton(Grid grid, string text, string color, Action action, int column, int row)
     {
-        if (_tripPicker.SelectedIndex < 0 || _tripPicker.SelectedIndex >= _foundTrips.Count)
-        {
-            _status.Text = "Vyber spoj v seznamu.";
-            return Task.CompletedTask;
-        }
-
-        _route.AttachTrip(_foundTrips[_tripPicker.SelectedIndex]);
-        RefreshState();
-        return Task.CompletedTask;
+        var button = TelmaxButton(text, Color.FromArgb(color));
+        button.Clicked += (_, _) => action();
+        grid.Add(button, column, row);
     }
 
-    private async Task StartGpsAsync()
+    private static Button SideButton(string text)
     {
-        await _route.StartTrackingAsync();
-        RefreshState();
+        return TelmaxButton(text, Color.FromArgb("#AEB9BE"));
     }
 
-    private Task StopGps()
+    private static Button TelmaxButton(string text, Color color)
     {
-        _route.StopTracking();
-        RefreshState();
-        return Task.CompletedTask;
-    }
-
-    private async Task ManualCurrentAsync()
-    {
-        await _route.ManualCurrentAsync();
-        RefreshState();
-    }
-
-    private async Task ManualNextAsync()
-    {
-        await _route.ManualNextAsync();
-        RefreshState();
-    }
-
-    private void RefreshState()
-    {
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            var trip = _route.Trip;
-            var cur = _route.CurrentStop;
-            var next = _route.NextStop;
-            var loc = _route.LastLocation;
-
-            _line.Text = trip?.Line ?? "-";
-            _trip.Text = trip == null ? "-" : ShortTrip(trip);
-            _current.Text = cur == null ? "Aktuální: -" : $"Aktuální: {cur.Sequence}. {cur.Name}";
-            _next.Text = next == null ? "Příští: -" : $"Příští: {next.Sequence}. {next.Name}";
-            _status.Text = _route.TrackingState;
-
-            if (cur != null && loc != null)
-            {
-                _distance.Text = $"Vzdálenost k aktuální: {_route.DistanceToCurrentStopM:0} m";
-                _gps.Text = $"GPS: {loc.Latitude:0.000000}, {loc.Longitude:0.000000}  přesnost {loc.Accuracy:0} m  rychlost {(loc.Speed ?? 0) * 3.6:0.0} km/h";
-            }
-            else
-            {
-                _distance.Text = "Vzdálenost k aktuální: -";
-                _gps.Text = "GPS: -";
-            }
-        });
-    }
-
-    private static string ShortTrip(CachedTrip trip)
-        => !string.IsNullOrWhiteSpace(trip.TripShortName) ? trip.TripShortName : trip.TripId;
-
-    private static View Sized(View view, double width)
-    {
-        view.WidthRequest = width;
-        return view;
-    }
-
-    private static void AddToGrid(Grid grid, View view, int column, int row, int columnSpan = 1)
-    {
-        Grid.SetColumn(view, column);
-        Grid.SetRow(view, row);
-        Grid.SetColumnSpan(view, columnSpan);
-        grid.Children.Add(view);
-    }
-
-    private static Label MakeSmallLabel(string text) => new()
-    {
-        Text = text,
-        TextColor = Color.FromArgb("#BDBEBF"),
-        FontSize = 18,
-        FontAttributes = FontAttributes.Bold
-    };
-
-    private static Label MakeBigLabel(string text) => new()
-    {
-        Text = text,
-        TextColor = Colors.White,
-        FontSize = 30,
-        FontAttributes = FontAttributes.Bold,
-        LineBreakMode = LineBreakMode.TailTruncation
-    };
-
-    private static Border Panel(View content) => new()
-    {
-        Stroke = Color.FromArgb("#34404C"),
-        StrokeThickness = 1,
-        Background = Color.FromArgb("#151D2E"),
-        Padding = new Thickness(14),
-        Content = content
-    };
-
-    private static Button Button(string text, Func<Task> click)
-    {
-        var button = new Button
+        return new Button
         {
             Text = text,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#263241"),
-            BorderColor = Color.FromArgb("#4B5A68"),
+            TextColor = Colors.Black,
+            BackgroundColor = color,
+            BorderColor = Color.FromArgb("#48555B"),
             BorderWidth = 1,
             CornerRadius = 0,
-            FontSize = 18,
-            FontAttributes = FontAttributes.Bold
+            FontSize = 17,
+            FontAttributes = FontAttributes.Bold,
+            Padding = new Thickness(4)
         };
+    }
 
-        button.Clicked += async (_, _) =>
+    private static Label Text(string text, double size, bool bold, Color color)
+    {
+        return new Label
         {
-            try { await click(); }
-            catch (Exception ex)
-            {
-                Logger.Error(ex.ToString());
-            }
+            Text = text,
+            FontSize = size,
+            FontAttributes = bold ? FontAttributes.Bold : FontAttributes.None,
+            TextColor = color,
+            VerticalTextAlignment = TextAlignment.Center,
+            LineBreakMode = LineBreakMode.TailTruncation
         };
-
-        return button;
     }
 }
