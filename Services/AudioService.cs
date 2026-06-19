@@ -13,6 +13,7 @@ public sealed class AudioService
     public async Task PlaySequenceAsync(IEnumerable<string> relativeFiles, CancellationToken token = default)
     {
         await _playLock.WaitAsync(token);
+
         try
         {
             foreach (var rel in relativeFiles.Where(x => !string.IsNullOrWhiteSpace(x)))
@@ -38,7 +39,7 @@ public sealed class AudioService
 
     public string? ResolveAudioPath(string relative)
     {
-        var clean = relative.Replace('\', '/').Trim();
+        var clean = relative.Replace("\\", "/").Trim();
 
         var candidates = new[]
         {
@@ -51,20 +52,27 @@ public sealed class AudioService
             Path.Combine(Paths.Audio, "Zastávky", Path.GetFileName(clean))
         };
 
-        foreach (var c in candidates)
-            if (File.Exists(c))
-                return c;
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
 
-        // Poslední záchrana: najít podle názvu. Ano, může to být pomalejší, ale lepší než mlčící plechovka.
         try
         {
             var fileName = Path.GetFileName(clean);
+
             if (!string.IsNullOrWhiteSpace(fileName) && Directory.Exists(Paths.Audio))
             {
-                return Directory.EnumerateFiles(Paths.Audio, fileName, SearchOption.AllDirectories).FirstOrDefault();
+                return Directory
+                    .EnumerateFiles(Paths.Audio, fileName, SearchOption.AllDirectories)
+                    .FirstOrDefault();
             }
         }
-        catch { }
+        catch
+        {
+            // Audio hledání nesmí shodit celou aplikaci. To by bylo až moc androidí.
+        }
 
         return null;
     }
@@ -80,20 +88,52 @@ public sealed class AudioService
 
         token.Register(() =>
         {
-            try { player.Stop(); } catch { }
-            try { player.Release(); } catch { }
+            try
+            {
+                player.Stop();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            try
+            {
+                player.Release();
+            }
+            catch
+            {
+                // ignored
+            }
+
             tcs.TrySetCanceled(token);
         });
 
         player.Completion += (_, _) =>
         {
-            try { player.Release(); } catch { }
+            try
+            {
+                player.Release();
+            }
+            catch
+            {
+                // ignored
+            }
+
             tcs.TrySetResult();
         };
 
         player.Error += (_, args) =>
         {
-            try { player.Release(); } catch { }
+            try
+            {
+                player.Release();
+            }
+            catch
+            {
+                // ignored
+            }
+
             tcs.TrySetException(new InvalidOperationException($"MediaPlayer error {args.What}/{args.Extra}"));
         };
 
